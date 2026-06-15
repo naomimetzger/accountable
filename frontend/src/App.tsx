@@ -4,7 +4,7 @@ import { WagmiAdapter } from '@cofhe/sdk/adapters'
 import { chains } from '@cofhe/sdk/chains'
 import { createCofheClient, createCofheConfig } from '@cofhe/sdk/web'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { type Address, isAddress, keccak256, stringToBytes } from 'viem'
+import { type Address, type PublicClient, isAddress, keccak256, stringToBytes } from 'viem'
 import { useAccount, usePublicClient, useWalletClient, useWriteContract } from 'wagmi'
 import { ACCOUNTABILITY_ABI } from './abi'
 import { CONTRACT_ADDRESS } from './config'
@@ -61,6 +61,24 @@ function goalToUint64(text: string): bigint {
   return BigInt(hash) & ((1n << 64n) - 1n)
 }
 
+const GAS_FEE_BUFFER_NUMERATOR = 12n
+const GAS_FEE_BUFFER_DENOMINATOR = 10n
+
+function applyGasBuffer(value: bigint): bigint {
+  return (value * GAS_FEE_BUFFER_NUMERATOR) / GAS_FEE_BUFFER_DENOMINATOR
+}
+
+async function getBufferedEip1559Fees(publicClient: PublicClient) {
+  const fees = await publicClient.estimateFeesPerGas()
+  if (!fees.maxFeePerGas || !fees.maxPriorityFeePerGas) {
+    return {}
+  }
+  return {
+    maxFeePerGas: applyGasBuffer(fees.maxFeePerGas),
+    maxPriorityFeePerGas: applyGasBuffer(fees.maxPriorityFeePerGas),
+  }
+}
+
 // Home
 function HomeScreen({ go }: { go: (s: Screen) => void }) {
   const { isConnected } = useAccount()
@@ -69,7 +87,9 @@ function HomeScreen({ go }: { go: (s: Screen) => void }) {
     <div className="screen home-screen">
       <div className="logo-mark">acc<span className="asterisk">*</span>untable</div>
       <p className="tagline">Set your daily goals privately.<br />Friends see ✓ or ✗ — never what you wrote.</p>
-      <ConnectButton />
+      <div className="home-wallet">
+        <ConnectButton />
+      </div>
       {isConnected && (
         <div className="home-actions">
           <button className="btn-primary" onClick={() => go('create')}>Create group</button>
@@ -126,7 +146,7 @@ function CreateScreen({ go, onGroupCreated }: { go: (s: Screen) => void; onGroup
         abi: ACCOUNTABILITY_ABI,
         functionName: 'createGroup',
         args: [name.trim(), parsedMembers],
-        gas: 500000n,
+        ...(await getBufferedEip1559Fees(publicClient)),
       })
 
       setStatus('Waiting for confirmation...')
@@ -263,7 +283,7 @@ function DashboardScreen({ go, groupId }: { go: (s: Screen) => void; groupId: nu
         abi: ACCOUNTABILITY_ABI,
         functionName: 'setGoals',
         args,
-        gas: 500000n,
+        ...(await getBufferedEip1559Fees(publicClient)),
       })
 
       setStatus('Waiting for confirmation...')
@@ -288,7 +308,7 @@ function DashboardScreen({ go, groupId }: { go: (s: Screen) => void; groupId: nu
         abi: ACCOUNTABILITY_ABI,
         functionName: 'completeGoal',
         args: [BigInt(groupId), i],
-        gas: 500000n,
+        ...(await getBufferedEip1559Fees(publicClient)),
       })
       await publicClient.waitForTransactionReceipt({ hash })
       setStatus('Goal complete ✓')
@@ -458,7 +478,7 @@ export default function App() {
         <button className="nav-logo" onClick={() => setScreen('home')}>
           acc<span className="asterisk">*</span>untable
         </button>
-        <ConnectButton showBalance={false} chainStatus="none" />
+        {screen !== 'home' && <ConnectButton showBalance={false} chainStatus="none" />}
       </nav>
       <main className="main-content">
         {screen === 'home' && <HomeScreen go={setScreen} />}

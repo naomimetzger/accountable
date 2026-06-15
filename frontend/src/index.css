@@ -99,7 +99,7 @@ button { -webkit-tap-highlight-color: transparent; }
   cursor: pointer;
 }
 
-.top-nav [data-rk] button, .home-screen [data-rk] button {
+.top-nav [data-rk] button, .home-wallet [data-rk] button {
   border-radius: var(--pill) !important;
   min-height: 44px !important;
   background: var(--teal) !important;
@@ -121,7 +121,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .home-screen::before { content: 'Today 01 July'; align-self: center; color: var(--muted); font-size: 12px; font-weight: 800; margin-bottom: -4px; }
 .logo-mark { position: relative; color: var(--ink); font-family: var(--font-display); font-size: clamp(46px, 13vw, 72px); font-weight: 800; letter-spacing: -0.08em; line-height: 0.95; text-align: center; margin: 0 auto 4px; }
 .tagline { max-width: 340px; margin: 0 auto 10px; color: var(--soft); font-size: 17px; font-weight: 650; line-height: 1.55; text-align: center; }
-.home-screen > [data-rk] { display: flex; justify-content: center; margin: 6px 0; }
+.home-wallet { display: flex; justify-content: center; width: 100%; margin: 6px 0; }
 .home-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; margin-top: 6px; }
 
 .fhe-badge {
