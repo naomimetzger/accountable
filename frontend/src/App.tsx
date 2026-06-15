@@ -10,11 +10,24 @@ import { ACCOUNTABILITY_ABI } from './abi'
 import { CONTRACT_ADDRESS } from './config'
 
 type Screen = 'home' | 'create' | 'dashboard' | 'leaderboard'
+type Theme = 'light' | 'dark'
 type CompletionMap = Record<string, boolean[]>
 
 const ACTIVE_GROUP_KEY = 'accountable:active-group'
 const GOAL_LABELS_KEY = 'accountable:goal-labels'
+const THEME_KEY = 'accountable:theme'
 const DEFAULT_GOALS = ['', '', '']
+
+function getInitialTheme(): Theme {
+  const saved = localStorage.getItem(THEME_KEY)
+  if (saved === 'light' || saved === 'dark') return saved
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.classList.remove('light', 'dark')
+  document.documentElement.classList.add(theme)
+}
 
 function shortAddr(addr: Address | string): string {
   const value = addr.toString()
@@ -61,21 +74,27 @@ function goalToUint64(text: string): bigint {
   return BigInt(hash) & ((1n << 64n) - 1n)
 }
 
-const GAS_FEE_BUFFER_NUMERATOR = 12n
-const GAS_FEE_BUFFER_DENOMINATOR = 10n
-
-function applyGasBuffer(value: bigint): bigint {
-  return (value * GAS_FEE_BUFFER_NUMERATOR) / GAS_FEE_BUFFER_DENOMINATOR
-}
-
 async function getBufferedEip1559Fees(publicClient: PublicClient) {
-  const fees = await publicClient.estimateFeesPerGas()
-  if (!fees.maxFeePerGas || !fees.maxPriorityFeePerGas) {
+  const [block, fees] = await Promise.all([
+    publicClient.getBlock({ blockTag: 'latest' }),
+    publicClient.estimateFeesPerGas(),
+  ])
+
+  const baseFee = block.baseFeePerGas
+  if (!baseFee) {
     return {}
   }
+
+  // Use live base fee (not stale estimate) and 2x headroom for the next block(s).
+  const maxFeePerGas = baseFee * 2n
+  const estimatedPriority = fees.maxPriorityFeePerGas ?? 1n
+  const maxPriorityFeePerGas = estimatedPriority > 0n ? estimatedPriority : 1n
+
+  // EIP-1559: maxFee must be >= baseFee + priority tip.
+  const minMaxFee = baseFee + maxPriorityFeePerGas
   return {
-    maxFeePerGas: applyGasBuffer(fees.maxFeePerGas),
-    maxPriorityFeePerGas: applyGasBuffer(fees.maxPriorityFeePerGas),
+    maxFeePerGas: maxFeePerGas > minMaxFee ? maxFeePerGas : minMaxFee,
+    maxPriorityFeePerGas,
   }
 }
 
@@ -457,15 +476,35 @@ function LeaderboardScreen({ go, groupId }: { go: (s: Screen) => void; groupId: 
   )
 }
 
+function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
+  return (
+    <button
+      className="theme-toggle"
+      type="button"
+      onClick={onToggle}
+      aria-label={'Switch to ' + (theme === 'light' ? 'dark' : 'light') + ' mode'}
+      aria-pressed={theme === 'light'}
+    >
+      {theme === 'light' ? 'Light mode' : 'Dark mode'}
+    </button>
+  )
+}
+
 // Root
 export default function App() {
   const { address } = useAccount()
   const [screen, setScreen] = useState<Screen>('home')
   const [activeGroupId, setActiveGroupIdState] = useState<number | null>(null)
+  const [theme, setTheme] = useState<Theme>(getInitialTheme)
 
   useEffect(() => {
     setActiveGroupIdState(readActiveGroup(address))
   }, [address])
+
+  useEffect(() => {
+    applyTheme(theme)
+    localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
 
   const setActiveGroupId = (groupId: number) => {
     if (address) saveActiveGroup(address, groupId)
@@ -478,7 +517,10 @@ export default function App() {
         <button className="nav-logo" onClick={() => setScreen('home')}>
           acc<span className="asterisk">*</span>untable
         </button>
-        {screen !== 'home' && <ConnectButton showBalance={false} chainStatus="none" />}
+        <div className="nav-actions">
+          <ThemeToggle theme={theme} onToggle={() => setTheme(current => current === 'light' ? 'dark' : 'light')} />
+          {screen !== 'home' && <ConnectButton showBalance={false} chainStatus="none" />}
+        </div>
       </nav>
       <main className="main-content">
         {screen === 'home' && <HomeScreen go={setScreen} />}

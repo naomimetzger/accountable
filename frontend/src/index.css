@@ -2,12 +2,13 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
-  color-scheme: light dark;
+:root,
+:root.light {
+  color-scheme: light;
   --bg: #F9F9F6;
   --surface: #FFFFFF;
   --surface-subtle: #FFFFFF;
-  --surface-muted: #F2F4F3;
+  --surface-muted: #FFFFFF;
   --ink: #1A2332;
   --soft: #4B5565;
   --muted: #7A8494;
@@ -32,24 +33,23 @@
   --pill: 999px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1A2332;
-    --surface: #242F41;
-    --surface-subtle: #202A3A;
-    --surface-muted: #1F2938;
-    --ink: #FFFFFF;
-    --soft: rgba(255, 255, 255, 0.78);
-    --muted: rgba(255, 255, 255, 0.58);
-    --line: rgba(0, 194, 199, 0.20);
-    --line-strong: rgba(0, 194, 199, 0.32);
-    --teal-soft: rgba(0, 194, 199, 0.12);
-    --teal-line: rgba(0, 194, 199, 0.34);
-    --success-bg: rgba(0, 168, 120, 0.18);
-    --danger-bg: rgba(255, 77, 106, 0.16);
-    --shadow: 0 22px 55px rgba(0, 0, 0, 0.28);
-    --shadow-sm: 0 10px 26px rgba(0, 0, 0, 0.22);
-  }
+:root.dark {
+  color-scheme: dark;
+  --bg: #1A2332;
+  --surface: #242F41;
+  --surface-subtle: #202A3A;
+  --surface-muted: #1F2938;
+  --ink: #FFFFFF;
+  --soft: rgba(255, 255, 255, 0.78);
+  --muted: rgba(255, 255, 255, 0.58);
+  --line: rgba(0, 194, 199, 0.20);
+  --line-strong: rgba(0, 194, 199, 0.32);
+  --teal-soft: rgba(0, 194, 199, 0.12);
+  --teal-line: rgba(0, 194, 199, 0.34);
+  --success-bg: rgba(0, 168, 120, 0.18);
+  --danger-bg: rgba(255, 77, 106, 0.16);
+  --shadow: 0 22px 55px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 10px 26px rgba(0, 0, 0, 0.22);
 }
 
 html { min-height: 100%; background: var(--bg); }
@@ -98,6 +98,28 @@ button { -webkit-tap-highlight-color: transparent; }
   box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.theme-toggle {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 9px 13px;
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.theme-toggle:hover { border-color: var(--teal-line); color: var(--teal); }
 
 .top-nav [data-rk] button, .home-wallet [data-rk] button {
   border-radius: var(--pill) !important;
