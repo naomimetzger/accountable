@@ -4,7 +4,24 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta
+      name="description"
+      content="ac*ountable keeps goals private while friends see completion checks."
+    />
+    <meta property="og:title" content="ac*ountable" />
+    <meta
+      property="og:description"
+      content="Private daily goals with public completion checks."
+    />
+    <title>ac*ountable</title>
+    <script>
+      try {
+        var theme = localStorage.getItem('accountable:theme');
+        document.documentElement.classList.add(theme === 'light' ? 'light' : 'dark');
+      } catch (e) {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

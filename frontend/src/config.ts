@@ -3,7 +3,7 @@ import { arbitrumSepolia } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 
 export const config = getDefaultConfig({
-  appName: 'acc*untable',
+  appName: 'ac*ountable',
   projectId: '0adc53fa435da163caedf3afcb2d8c8a',
   chains: [arbitrumSepolia],
   transports: {
