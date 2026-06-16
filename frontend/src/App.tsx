@@ -33,6 +33,7 @@ import {
   CHECK_IN_OPTIONS,
   DEFAULT_ONBOARDING_VALUES,
   GUEST_PLACEHOLDER_ADDRESS,
+  type NotificationPreference,
   type BuildCategory,
   type CheckInTime,
   type GoalCount,
@@ -44,6 +45,7 @@ import {
   readEffectiveOnboarding,
   readEffectiveProfile,
   readGuestOnboarding,
+  saveNotificationPreference,
   suggestedGoalPlaceholders,
   syncGuestToWallet,
 } from './onboarding'
@@ -227,6 +229,56 @@ function NoGroupPrompt({ go, backLabel, onBack }: { go: (s: Screen) => void; bac
   )
 }
 
+
+function NotificationOptInScreen({
+  isSaving,
+  onTurnOn,
+  onSkip,
+}: {
+  isSaving: boolean
+  onTurnOn: () => void
+  onSkip: () => void
+}) {
+  return (
+    <>
+      <div className="onboarding-topline">
+        <p className="onboarding-progress">Setup complete</p>
+        <button className="nav-link-btn" onClick={onSkip} disabled={isSaving}>Skip</button>
+      </div>
+      <div className="notification-hero" aria-hidden="true">
+        <div className="notification-card primary">
+          <span className="notification-icon">✓</span>
+          <div>
+            <p className="notification-title">Evening check-in</p>
+            <p className="notification-copy">Tap once when your goals are done.</p>
+          </div>
+        </div>
+        <div className="notification-card offset">
+          <span className="notification-icon pulse">2</span>
+          <div>
+            <p className="notification-title">Maya nudged the group</p>
+            <p className="notification-copy">A tiny reminder before the streak slips.</p>
+          </div>
+        </div>
+        <div className="notification-card">
+          <span className="notification-icon">ac*</span>
+          <div>
+            <p className="notification-title">Accountability update</p>
+            <p className="notification-copy">Two friends checked in today.</p>
+          </div>
+        </div>
+      </div>
+      <h1 id="onboarding-title" className="screen-title">Get Notified</h1>
+      <p className="screen-sub notification-sub">
+        Get gentle goal check-ins, group nudges, and accountability updates so your crew stays in sync.
+      </p>
+      <button className="btn-primary full" onClick={onTurnOn} disabled={isSaving}>
+        {isSaving ? 'Saving preference...' : 'Turn On Notifications'}
+      </button>
+    </>
+  )
+}
+
 function goalToUint64(text: string): bigint {
   const hash = keccak256(stringToBytes(text.trim() || ' '))
   return BigInt(hash) & ((1n << 64n) - 1n)
@@ -291,6 +343,8 @@ function OnboardingFlow({
   const [displayName, setDisplayName] = useState(existing?.displayName ?? DEFAULT_ONBOARDING_VALUES.displayName)
   const [avatar, setAvatar] = useState(existing?.avatar ?? DEFAULT_ONBOARDING_VALUES.avatar)
   const [isDone, setIsDone] = useState(false)
+  const [showNotificationOptIn, setShowNotificationOptIn] = useState(false)
+  const [isSavingNotification, setIsSavingNotification] = useState(false)
   const totalSteps = 4
 
   const toggleBuilding = (option: BuildCategory) => {
@@ -312,13 +366,44 @@ function OnboardingFlow({
       avatar,
       updatedAt: new Date().toISOString(),
     })
+    setShowNotificationOptIn(true)
     setIsDone(true)
+  }
+
+  const completeNotificationStep = async (wanted: boolean) => {
+    if (isSavingNotification) return
+    setIsSavingNotification(true)
+
+    let permission: NotificationPreference['permission'] = 'unsupported'
+    try {
+      if ('Notification' in window) {
+        permission = window.Notification.permission
+        if (wanted && permission === 'default') {
+          permission = await window.Notification.requestPermission()
+        }
+      }
+
+      saveNotificationPreference({
+        wanted,
+        permission,
+        updatedAt: new Date().toISOString(),
+      }, address)
+    } finally {
+      setIsSavingNotification(false)
+      setShowNotificationOptIn(false)
+    }
   }
 
   return (
     <div className="onboarding-shell" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
       <div className="onboarding-card">
-        {isDone ? (
+        {isDone ? showNotificationOptIn ? (
+          <NotificationOptInScreen
+            isSaving={isSavingNotification}
+            onTurnOn={() => { void completeNotificationStep(true) }}
+            onSkip={() => { void completeNotificationStep(false) }}
+          />
+        ) : (
           <>
             <p className="onboarding-progress">Setup complete</p>
             <div className="onboarding-avatar" aria-hidden="true">

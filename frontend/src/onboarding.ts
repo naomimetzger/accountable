@@ -13,6 +13,12 @@ export type OnboardingStatus = 'completed' | 'skipped'
 export type BuildCategory = 'fitness' | 'focus/work' | 'sleep' | 'mindfulness' | 'learning' | 'breaking a habit'
 export type GoalCount = 1 | 2 | 3
 export type CheckInTime = 'morning' | 'midday' | 'evening'
+export type StoredNotificationPermission = NotificationPermission | 'unsupported'
+export type NotificationPreference = {
+  wanted: boolean
+  permission: StoredNotificationPermission
+  updatedAt: string
+}
 
 export type OnboardingProfile = {
   status: OnboardingStatus
@@ -26,6 +32,8 @@ export type OnboardingProfile = {
 
 export const GUEST_ONBOARDING_KEY = 'accountable:onboarding:guest'
 export const GUEST_PROFILE_KEY = 'accountable:profile:guest'
+export const GUEST_NOTIFICATION_PREFERENCE_KEY = 'accountable:notifications:guest'
+export const NOTIFICATION_PREFERENCE_KEY = 'accountable:notifications'
 export const ONBOARDING_COMPLETE_KEY = 'accountable:onboarding-complete'
 export const GUEST_AVATAR_SEED = 'accountable-guest'
 export const GUEST_PLACEHOLDER_ADDRESS = '0x0000000000000000000000000000000000000001' as Address
@@ -61,6 +69,10 @@ function walletOnboardingKey(address: Address): string {
   return ONBOARDING_KEY + ':' + address.toLowerCase()
 }
 
+function walletNotificationPreferenceKey(address: Address): string {
+  return NOTIFICATION_PREFERENCE_KEY + ':' + address.toLowerCase()
+}
+
 function parseOnboardingProfile(raw: string, avatarSeed: string): OnboardingProfile | null {
   try {
     const parsed = JSON.parse(raw) as Partial<OnboardingProfile>
@@ -82,6 +94,23 @@ function parseOnboardingProfile(raw: string, avatarSeed: string): OnboardingProf
       checkIn,
       displayName: typeof parsed.displayName === 'string' ? parsed.displayName : '',
       avatar: normalizeAvatar(parsed.avatar, avatarSeed),
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+    }
+  } catch {
+    return null
+  }
+}
+
+function parseNotificationPreference(raw: string): NotificationPreference | null {
+  try {
+    const parsed = JSON.parse(raw) as Partial<NotificationPreference>
+    const permissions: StoredNotificationPermission[] = ['default', 'denied', 'granted', 'unsupported']
+    if (typeof parsed.wanted !== 'boolean') return null
+    return {
+      wanted: parsed.wanted,
+      permission: permissions.includes(parsed.permission as StoredNotificationPermission)
+        ? parsed.permission as StoredNotificationPermission
+        : 'unsupported',
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
     }
   } catch {
@@ -124,6 +153,23 @@ export function saveGuestProfile(profile: UserProfile) {
   localStorage.setItem(GUEST_PROFILE_KEY, JSON.stringify(profile))
 }
 
+export function readGuestNotificationPreference(): NotificationPreference | null {
+  const raw = localStorage.getItem(GUEST_NOTIFICATION_PREFERENCE_KEY)
+  return raw ? parseNotificationPreference(raw) : null
+}
+
+export function readWalletNotificationPreference(address: Address): NotificationPreference | null {
+  const raw = localStorage.getItem(walletNotificationPreferenceKey(address))
+  return raw ? parseNotificationPreference(raw) : null
+}
+
+export function saveNotificationPreference(preference: NotificationPreference, address?: Address) {
+  localStorage.setItem(GUEST_NOTIFICATION_PREFERENCE_KEY, JSON.stringify(preference))
+  if (address) {
+    localStorage.setItem(walletNotificationPreferenceKey(address), JSON.stringify(preference))
+  }
+}
+
 export function readWalletOnboarding(address: Address): OnboardingProfile | null {
   const raw = localStorage.getItem(walletOnboardingKey(address))
   return raw ? parseOnboardingProfile(raw, address) : null
@@ -161,6 +207,11 @@ export function profileFromOnboarding(profile: OnboardingProfile | null): UserPr
 }
 
 export function syncGuestToWallet(address: Address): OnboardingProfile | null {
+  const guestNotificationPreference = readGuestNotificationPreference()
+  if (guestNotificationPreference && !readWalletNotificationPreference(address)) {
+    saveNotificationPreference(guestNotificationPreference, address)
+  }
+
   const guest = readGuestOnboarding()
   if (!guest) return readWalletOnboarding(address)
 
