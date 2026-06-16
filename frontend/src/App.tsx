@@ -23,14 +23,30 @@ import {
   recordCompletedDay,
 } from './completionHistory'
 import {
-  DEFAULT_PROFILE_AVATAR,
   type ProfileAvatar,
   type UserProfile,
-  normalizeAvatar,
-  readUserProfile,
   saveUserProfile,
   useMemberProfiles,
 } from './profile'
+import {
+  BUILDING_OPTIONS,
+  CHECK_IN_OPTIONS,
+  DEFAULT_ONBOARDING_VALUES,
+  GUEST_PLACEHOLDER_ADDRESS,
+  type BuildCategory,
+  type CheckInTime,
+  type GoalCount,
+  type OnboardingProfile,
+  buildingHeadline,
+  defaultGoalsForProfile,
+  isOnboardingComplete,
+  persistOnboarding,
+  readEffectiveOnboarding,
+  readEffectiveProfile,
+  readGuestOnboarding,
+  suggestedGoalPlaceholders,
+  syncGuestToWallet,
+} from './onboarding'
 
 type Screen = 'home' | 'create' | 'dashboard' | 'leaderboard'
 type Theme = 'light' | 'dark'
@@ -44,39 +60,14 @@ type MemberField = {
   error: string | null
   isResolving: boolean
 }
-type BuildCategory = 'fitness' | 'focus/work' | 'sleep' | 'mindfulness' | 'learning' | 'breaking a habit'
-type GoalCount = 1 | 2 | 3
-type CheckInTime = 'morning' | 'midday' | 'evening'
-type OnboardingStatus = 'completed' | 'skipped'
-type OnboardingProfile = {
-  status: OnboardingStatus
-  building: BuildCategory[]
-  dailyGoals: GoalCount
-  checkIn: CheckInTime
-  displayName: string
-  avatar: ProfileAvatar
-  updatedAt: string
-}
 
 const ACTIVE_GROUP_KEY = 'accountable:active-group'
 const GOAL_LABELS_KEY = 'accountable:goal-labels'
-const ONBOARDING_KEY = 'accountable:onboarding'
 const THEME_KEY = 'accountable:theme'
-const DEFAULT_GOALS = ['', '', '']
-const BUILDING_OPTIONS: BuildCategory[] = ['fitness', 'focus/work', 'sleep', 'mindfulness', 'learning', 'breaking a habit']
-const CHECK_IN_OPTIONS: CheckInTime[] = ['morning', 'midday', 'evening']
 const mainnetEnsClient = createPublicClient({
   chain: mainnet,
   transport: http(),
 })
-const DEFAULT_ONBOARDING_VALUES = {
-  building: [] as BuildCategory[],
-  dailyGoals: 3 as GoalCount,
-  checkIn: 'evening' as CheckInTime,
-  displayName: '',
-  avatar: DEFAULT_PROFILE_AVATAR,
-}
-
 function getInitialTheme(): Theme {
   const saved = localStorage.getItem(THEME_KEY)
   if (saved === 'light' || saved === 'dark') return saved
@@ -193,71 +184,6 @@ function saveGoalLabels(groupId: number, member: Address, labels: string[]) {
   localStorage.setItem(goalLabelsKey(groupId, member), JSON.stringify(labels))
 }
 
-function onboardingKey(address: Address): string {
-  return ONBOARDING_KEY + ':' + address.toLowerCase()
-}
-
-function readOnboardingProfile(address?: Address): OnboardingProfile | null {
-  if (!address) return null
-  try {
-    const raw = localStorage.getItem(onboardingKey(address))
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<OnboardingProfile>
-    if (parsed.status !== 'completed' && parsed.status !== 'skipped') return null
-    const dailyGoals = parsed.dailyGoals === 1 || parsed.dailyGoals === 2 || parsed.dailyGoals === 3
-      ? parsed.dailyGoals
-      : DEFAULT_ONBOARDING_VALUES.dailyGoals
-    const checkIn = CHECK_IN_OPTIONS.includes(parsed.checkIn as CheckInTime)
-      ? parsed.checkIn as CheckInTime
-      : DEFAULT_ONBOARDING_VALUES.checkIn
-    const building = Array.isArray(parsed.building)
-      ? parsed.building.filter((item): item is BuildCategory => BUILDING_OPTIONS.includes(item as BuildCategory))
-      : DEFAULT_ONBOARDING_VALUES.building
-
-    return {
-      status: parsed.status,
-      building,
-      dailyGoals,
-      checkIn,
-      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : '',
-      avatar: normalizeAvatar(parsed.avatar, address),
-      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
-    }
-  } catch {
-    return null
-  }
-}
-
-function saveOnboardingProfile(address: Address, profile: OnboardingProfile) {
-  localStorage.setItem(onboardingKey(address), JSON.stringify(profile))
-}
-
-function defaultGoalsForProfile(profile?: OnboardingProfile | null): string[] {
-  const count = profile?.status === 'completed' ? profile.dailyGoals : DEFAULT_ONBOARDING_VALUES.dailyGoals
-  return Array.from({ length: count }, () => '')
-}
-
-const BUILDING_SUGGESTIONS: Record<BuildCategory, string> = {
-  fitness: '10-minute movement',
-  'focus/work': 'One focused work sprint',
-  sleep: 'Start wind-down on time',
-  mindfulness: 'Two-minute breathing reset',
-  learning: 'Read or practice for 15 minutes',
-  'breaking a habit': 'Pause before the habit loop',
-}
-
-function suggestedGoalPlaceholders(profile?: OnboardingProfile | null): string[] {
-  if (profile?.status !== 'completed') return ['Goal 1', 'Goal 2', 'Goal 3']
-
-  return profile.building.map(item => BUILDING_SUGGESTIONS[item]).concat(['One tiny win', 'Keep it small', 'Done is enough'])
-}
-
-function buildingHeadline(profile?: OnboardingProfile | null): string | null {
-  if (profile?.status !== 'completed' || profile.building.length === 0) return null
-  const labels = profile.building.map(item => item.split('/')[0]).join(', ')
-  return 'Building toward ' + labels + '.'
-}
-
 function clearActiveGroup(address: Address) {
   localStorage.removeItem(activeGroupKey(address))
 }
@@ -344,14 +270,19 @@ async function getBufferedEip1559Fees(publicClient: PublicClient) {
 function OnboardingFlow({
   profile,
   address,
+  isConnected,
   onComplete,
   onSkip,
+  onFinish,
 }: {
   profile: OnboardingProfile | null
-  address: Address
+  address?: Address
+  isConnected: boolean
   onComplete: (profile: OnboardingProfile) => void
   onSkip: () => void
+  onFinish: () => void
 }) {
+  const avatarAddress = address ?? GUEST_PLACEHOLDER_ADDRESS
   const existing = profile?.status === 'completed' ? profile : null
   const [step, setStep] = useState(0)
   const [building, setBuilding] = useState<BuildCategory[]>(existing?.building ?? DEFAULT_ONBOARDING_VALUES.building)
@@ -390,13 +321,24 @@ function OnboardingFlow({
           <>
             <p className="onboarding-progress">Setup complete</p>
             <div className="onboarding-avatar" aria-hidden="true">
-              <MemberAvatar address={address} avatar={avatar} size="lg" />
+              <MemberAvatar address={avatarAddress} avatar={avatar} size="lg" />
             </div>
             <h1 id="onboarding-title" className="screen-title">you're all set</h1>
             <p className="screen-sub">
-              Start small, keep it private, and let your crew see the wins.
+              {isConnected
+                ? 'Start small, keep it private, and let your crew see the wins.'
+                : 'Connect your wallet to create your group and lock in daily goals.'}
             </p>
-            <button className="btn-primary full" onClick={onSkip}>Go to dashboard</button>
+            {isConnected ? (
+              <button className="btn-primary full" onClick={onFinish}>Go to dashboard</button>
+            ) : (
+              <>
+                <div className="onboarding-connect">
+                  <ConnectButton />
+                </div>
+                <button className="btn-ghost full" onClick={onSkip}>Back to home</button>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -407,7 +349,7 @@ function OnboardingFlow({
 
             {step === 0 && (
               <>
-                <h1 id="onboarding-title" className="screen-title">What are you building?</h1>
+                <h1 id="onboarding-title" className="screen-title">What do you want to stay on top of?</h1>
                 <p className="screen-sub">Choose any that fit. This just shapes suggestions.</p>
                 <div className="answer-grid">
                   {BUILDING_OPTIONS.map(option => (
@@ -473,7 +415,7 @@ function OnboardingFlow({
                 <h1 id="onboarding-title" className="screen-title">Pick your profile</h1>
                 <p className="screen-sub">This stays on this device and shows up in your group list.</p>
                 <ProfilePicker
-                  address={address}
+                  address={avatarAddress}
                   displayName={displayName}
                   avatar={avatar}
                   onDisplayNameChange={setDisplayName}
@@ -508,11 +450,15 @@ function HomeScreen({
   onboarding,
   userProfile,
   address,
+  onboardingComplete,
+  onStartOnboarding,
 }: {
   go: (s: Screen) => void
   onboarding: OnboardingProfile | null
   userProfile: UserProfile | null
   address?: Address
+  onboardingComplete: boolean
+  onStartOnboarding: () => void
 }) {
   const { isConnected } = useAccount()
   const greetingName = userProfile?.displayName.trim()
@@ -522,9 +468,9 @@ function HomeScreen({
     <div className="screen home-screen">
       <section className="home-hero">
         <div className="logo-mark">ac<span className="asterisk">*</span>ountable</div>
-        {isConnected && greetingName ? (
+        {(isConnected || onboardingComplete) && greetingName ? (
           <p className="home-greeting">
-            {address && userProfile && <MemberAvatar address={address} avatar={userProfile.avatar} size="sm" />}
+            {userProfile && <MemberAvatar address={address ?? GUEST_PLACEHOLDER_ADDRESS} avatar={userProfile.avatar} size="sm" />}
             <span>Hey {greetingName} — ready when you are.</span>
           </p>
         ) : null}
@@ -598,12 +544,22 @@ function HomeScreen({
       <div className="home-cta">
         <div className="home-cta-copy">
           <p className="eyebrow">Ready to make it real?</p>
-          <h2>Connect your wallet to create a group.</h2>
+          {!onboardingComplete ? (
+            <h2>Answer a few quick questions to shape your setup.</h2>
+          ) : !isConnected ? (
+            <h2>Connect your wallet to create your group.</h2>
+          ) : (
+            <h2>You&apos;re set — create a group or open your dashboard.</h2>
+          )}
         </div>
-        <div className="home-wallet">
-          <ConnectButton />
-        </div>
-        {isConnected && (
+        {!onboardingComplete ? (
+          <button className="btn-primary home-start-btn" onClick={onStartOnboarding}>Get started</button>
+        ) : (
+          <div className="home-wallet">
+            <ConnectButton />
+          </div>
+        )}
+        {isConnected && onboardingComplete && (
           <div className="home-actions">
             <button className="btn-primary" onClick={() => go('create')}>Create group</button>
             <button className="btn-ghost" onClick={() => go('dashboard')}>My dashboard</button>
@@ -1332,15 +1288,18 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
 
 // Root
 export default function App() {
-  const { address } = useAccount()
+  const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
   const [screen, setScreen] = useState<Screen>('home')
   const [activeGroupId, setActiveGroupIdState] = useState<number | null>(null)
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
-  const [onboardingProfile, setOnboardingProfile] = useState<OnboardingProfile | null>(null)
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [onboardingProfile, setOnboardingProfile] = useState<OnboardingProfile | null>(() => readEffectiveOnboarding())
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => readEffectiveProfile())
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showProfileEditor, setShowProfileEditor] = useState(false)
+  const [onboardingDoneAwaitingWallet, setOnboardingDoneAwaitingWallet] = useState(false)
+  const hasAutoRoutedRef = useRef(false)
+  const onboardingComplete = isOnboardingComplete(onboardingProfile)
 
   useEffect(() => {
     if (!address) {
@@ -1374,24 +1333,37 @@ export default function App() {
   }, [address, publicClient])
 
   useEffect(() => {
-    applyTheme(theme)
-    localStorage.setItem(THEME_KEY, theme)
-  }, [theme])
-
-  useEffect(() => {
     if (!address) {
-      setOnboardingProfile(null)
-      setUserProfile(null)
-      setShowOnboarding(false)
+      setOnboardingProfile(readGuestOnboarding())
+      setUserProfile(readEffectiveProfile())
       setShowProfileEditor(false)
       return
     }
 
-    const stored = readOnboardingProfile(address)
+    const synced = syncGuestToWallet(address)
+    const stored = readEffectiveOnboarding(address) ?? synced
     setOnboardingProfile(stored)
-    setUserProfile(readUserProfile(address))
-    setShowOnboarding(stored === null)
+    setUserProfile(readEffectiveProfile(address))
+    setShowOnboarding(false)
   }, [address])
+
+  useEffect(() => {
+    if (hasAutoRoutedRef.current) return
+    if (!isConnected || !onboardingComplete) return
+    if (onboardingDoneAwaitingWallet) {
+      setOnboardingDoneAwaitingWallet(false)
+      setShowOnboarding(false)
+    }
+    if (activeGroupId !== null) {
+      hasAutoRoutedRef.current = true
+      setScreen('dashboard')
+    }
+  }, [isConnected, onboardingComplete, activeGroupId, onboardingDoneAwaitingWallet])
+
+  useEffect(() => {
+    applyTheme(theme)
+    localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
 
   const setActiveGroupId = (groupId: number) => {
     if (address) saveActiveGroup(address, groupId)
@@ -1399,42 +1371,58 @@ export default function App() {
   }
 
   const completeOnboarding = (profile: OnboardingProfile) => {
-    if (!address) return
-    saveOnboardingProfile(address, profile)
-    const nextProfile: UserProfile = {
-      displayName: profile.displayName,
-      avatar: profile.avatar,
-      updatedAt: profile.updatedAt,
-    }
-    saveUserProfile(address, nextProfile)
+    const nextProfile = persistOnboarding(profile, address)
     setOnboardingProfile(profile)
     setUserProfile(nextProfile)
+
+    if (!address) {
+      setOnboardingDoneAwaitingWallet(true)
+    }
   }
 
   const closeOrSkipOnboarding = () => {
-    if (!address) return setShowOnboarding(false)
     if (!onboardingProfile) {
       const skippedProfile: OnboardingProfile = {
         status: 'skipped',
         ...DEFAULT_ONBOARDING_VALUES,
         updatedAt: new Date().toISOString(),
       }
-      saveOnboardingProfile(address, skippedProfile)
+      const nextProfile = persistOnboarding(skippedProfile, address)
       setOnboardingProfile(skippedProfile)
+      setUserProfile(nextProfile)
     }
     setShowOnboarding(false)
+    setOnboardingDoneAwaitingWallet(false)
+  }
+
+  const finishOnboarding = () => {
+    setShowOnboarding(false)
+    setOnboardingDoneAwaitingWallet(false)
+    if (activeGroupId !== null) {
+      setScreen('dashboard')
+    } else {
+      setScreen('home')
+    }
+  }
+
+  const openOnboarding = () => {
+    setShowOnboarding(true)
+    setOnboardingDoneAwaitingWallet(false)
   }
 
   const handleProfileSave = (profile: UserProfile) => {
     setUserProfile(profile)
-    setOnboardingProfile(current => current
-      ? {
-          ...current,
-          displayName: profile.displayName,
-          avatar: profile.avatar,
-          updatedAt: profile.updatedAt,
-        }
-      : current)
+    setOnboardingProfile(current => {
+      if (!current) return current
+      const updated = {
+        ...current,
+        displayName: profile.displayName,
+        avatar: profile.avatar,
+        updatedAt: profile.updatedAt,
+      }
+      persistOnboarding(updated, address)
+      return updated
+    })
   }
 
   return (
@@ -1445,7 +1433,7 @@ export default function App() {
         </button>
         <div className="nav-actions">
           {address && <button className="setup-link" onClick={() => setShowProfileEditor(true)}>Edit profile</button>}
-          {address && <button className="setup-link" onClick={() => setShowOnboarding(true)}>Edit setup</button>}
+          {onboardingComplete && <button className="setup-link" onClick={openOnboarding}>Edit setup</button>}
           <ThemeToggle theme={theme} onToggle={() => setTheme(current => current === 'light' ? 'dark' : 'light')} />
           {screen !== 'home' && <ConnectButton showBalance={false} chainStatus="none" />}
         </div>
@@ -1457,6 +1445,8 @@ export default function App() {
             onboarding={onboardingProfile}
             userProfile={userProfile}
             address={address}
+            onboardingComplete={onboardingComplete}
+            onStartOnboarding={openOnboarding}
           />
         )}
         {screen === 'create' && <CreateScreen go={setScreen} onGroupCreated={setActiveGroupId} />}
@@ -1466,7 +1456,7 @@ export default function App() {
             groupId={activeGroupId}
             onboarding={onboardingProfile}
             userProfile={userProfile}
-            onEditSetup={() => setShowOnboarding(true)}
+            onEditSetup={openOnboarding}
             onEditProfile={() => setShowProfileEditor(true)}
           />
         )}
@@ -1479,12 +1469,14 @@ export default function App() {
           />
         )}
       </main>
-      {address && showOnboarding && (
+      {showOnboarding && (
         <OnboardingFlow
           profile={onboardingProfile}
           address={address}
+          isConnected={isConnected}
           onComplete={completeOnboarding}
           onSkip={closeOrSkipOnboarding}
+          onFinish={finishOnboarding}
         />
       )}
       {address && showProfileEditor && (

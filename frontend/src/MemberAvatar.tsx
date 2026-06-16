@@ -1,4 +1,5 @@
 import type { Address } from 'viem'
+import { GUEST_AVATAR_SEED } from './onboarding'
 import {
   generatedAvatarCells,
   generatedAvatarPalette,
@@ -6,7 +7,7 @@ import {
 } from './profile'
 
 type MemberAvatarProps = {
-  address: Address
+  address?: Address
   avatar?: ProfileAvatar
   size?: 'sm' | 'md' | 'lg'
   className?: string
@@ -18,7 +19,8 @@ export function MemberAvatar({
   size = 'md',
   className = '',
 }: MemberAvatarProps) {
-  const resolved = avatar ?? { kind: 'generated', seed: address } as const
+  const fallbackSeed = address ?? GUEST_AVATAR_SEED
+  const resolved = avatar ?? { kind: 'generated', seed: fallbackSeed } as const
 
   if (resolved.kind === 'emoji') {
     return (

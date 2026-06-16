@@ -1,6 +1,7 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import type { Address } from 'viem'
 import { MemberAvatar } from './MemberAvatar'
+import { GUEST_AVATAR_SEED } from './onboarding'
 import {
   AVATAR_OPTIONS,
   GENERATED_AVATAR_VARIANTS,
@@ -11,7 +12,7 @@ import {
 } from './profile'
 
 type ProfilePickerProps = {
-  address: Address
+  address?: Address
   displayName: string
   avatar: ProfileAvatar
   onDisplayNameChange: (value: string) => void
@@ -27,6 +28,7 @@ export function ProfilePicker({
   onAvatarChange,
   inputId = 'display-name',
 }: ProfilePickerProps) {
+  const avatarSeed = address ?? GUEST_AVATAR_SEED
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -101,7 +103,7 @@ export function ProfilePicker({
         <p className="section-label">Generated avatar</p>
         <div className="generated-avatar-grid" aria-label="Choose generated avatar">
           {GENERATED_AVATAR_VARIANTS.map(variant => {
-            const seed = generatedAvatarSeed(address, variant)
+            const seed = generatedAvatarSeed(avatarSeed, variant)
             const optionAvatar: ProfileAvatar = { kind: 'generated', seed }
             const label = variant === 'wallet' ? 'Wallet' : variant.charAt(0).toUpperCase() + variant.slice(1)
             return (

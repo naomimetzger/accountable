@@ -291,6 +291,19 @@ button { -webkit-tap-highlight-color: transparent; }
 .home-wallet [data-rk] button {
   box-shadow: var(--glow), var(--shadow-sm) !important;
 }
+.home-start-btn {
+  align-self: center;
+  justify-self: end;
+  white-space: nowrap;
+}
+.onboarding-connect {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.onboarding-connect [data-rk] button {
+  width: 100%;
+}
 
 .fhe-badge {
   display: flex;
