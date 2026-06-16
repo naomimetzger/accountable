@@ -795,15 +795,11 @@ function DashboardScreen({
   groupId,
   onboarding,
   userProfile,
-  onEditSetup,
-  onEditProfile,
 }: {
   go: (s: Screen) => void
   groupId: number | null
   onboarding: OnboardingProfile | null
   userProfile: UserProfile | null
-  onEditSetup: () => void
-  onEditProfile: () => void
 }) {
   const { address } = useAccount()
   const publicClient = usePublicClient()
@@ -1040,8 +1036,6 @@ function DashboardScreen({
       <div className="screen-header">
         <button className="back-btn" onClick={() => go('home')}>← Back</button>
         <div className="header-actions">
-          <button className="nav-link-btn" onClick={onEditProfile}>Edit profile</button>
-          <button className="nav-link-btn" onClick={onEditSetup}>Edit setup</button>
           <button className="nav-link-btn" onClick={() => go('leaderboard')}>Leaderboard →</button>
         </div>
       </div>
@@ -1461,8 +1455,6 @@ export default function App() {
             groupId={activeGroupId}
             onboarding={onboardingProfile}
             userProfile={userProfile}
-            onEditSetup={openOnboarding}
-            onEditProfile={() => setShowProfileEditor(true)}
           />
         )}
         {screen === 'leaderboard' && (

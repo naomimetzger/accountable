@@ -978,7 +978,7 @@ input[type='text']::placeholder { color: var(--muted); font-family: var(--font-b
   .screen-header .back-btn { align-self: flex-start; margin-bottom: 0; }
   .header-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 8px;
     width: 100%;
     min-width: 0;
@@ -992,7 +992,6 @@ input[type='text']::placeholder { color: var(--muted); font-family: var(--font-b
     line-height: 1.2;
     padding-inline: 10px;
   }
-  .header-actions .nav-link-btn:nth-child(3) { grid-column: 1 / -1; }
   .onboarding-card {
     border-radius: var(--radius);
     padding: 18px;
