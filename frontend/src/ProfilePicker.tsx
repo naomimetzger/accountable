@@ -29,6 +29,7 @@ export function ProfilePicker({
   inputId = 'display-name',
 }: ProfilePickerProps) {
   const avatarSeed = address ?? GUEST_AVATAR_SEED
+  const displayNameInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -67,9 +68,10 @@ export function ProfilePicker({
         </div>
       </div>
 
-      <div className="field">
+      <div className="field profile-display-field" onClick={() => displayNameInputRef.current?.focus()}>
         <label htmlFor={inputId}>Display name</label>
         <input
+          ref={displayNameInputRef}
           id={inputId}
           type="text"
           placeholder="e.g. Naomi"

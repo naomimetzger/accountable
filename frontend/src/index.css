@@ -830,6 +830,8 @@ input[type='text']::placeholder { color: var(--muted); font-family: var(--font-b
 .member-identity-addr { color: var(--muted); font-family: var(--font-mono); font-size: 11px; margin-top: 2px; }
 
 .profile-picker { display: grid; gap: 16px; }
+.profile-display-field { cursor: text; }
+.profile-display-field label { cursor: text; }
 .profile-picker-section { display: grid; gap: 10px; }
 .profile-preview {
   display: flex;
