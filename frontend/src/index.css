@@ -459,14 +459,23 @@ button { -webkit-tap-highlight-color: transparent; }
   inset: 0;
   z-index: 30;
   display: grid;
-  place-items: center;
+  place-items: safe center;
+  align-content: safe center;
   padding: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: blur(16px);
 }
 
 .onboarding-card {
   width: min(100%, 520px);
+  max-height: min(92vh, calc(100dvh - 36px));
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--line);
   border-radius: 34px;
   background: var(--surface);
@@ -986,8 +995,6 @@ input[type='text']::placeholder { color: var(--muted); font-family: var(--font-b
     border-radius: var(--radius);
     padding: 18px;
     max-height: calc(100dvh - 36px);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
   }
   .onboarding-actions { grid-template-columns: 1fr; }
   .onboarding-topline { flex-wrap: wrap; gap: 8px; }
@@ -1033,6 +1040,7 @@ input[type='text']::placeholder { color: var(--muted); font-family: var(--font-b
   .nav-logo { font-size: 14px; padding: 9px 10px; max-width: calc(100% - 100px); }
   .main-content { padding-inline: 12px; }
   .onboarding-shell, .profile-editor-shell { padding: 12px; }
+  .onboarding-card { max-height: calc(100dvh - 24px); }
   .home-screen { gap: 28px; }
   .preview-card, .how-it-works, .home-cta, .form-card, .section, .empty-state-card, .streak-card { padding: 16px; }
   .logo-mark { font-size: 38px; }
