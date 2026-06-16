@@ -287,7 +287,7 @@ function OnboardingFlow({
   const [step, setStep] = useState(0)
   const [building, setBuilding] = useState<BuildCategory[]>(existing?.building ?? DEFAULT_ONBOARDING_VALUES.building)
   const [dailyGoals, setDailyGoals] = useState<GoalCount>(existing?.dailyGoals ?? DEFAULT_ONBOARDING_VALUES.dailyGoals)
-  const [checkIn, setCheckIn] = useState<CheckInTime>(existing?.checkIn ?? DEFAULT_ONBOARDING_VALUES.checkIn)
+  const [checkIn, setCheckIn] = useState<CheckInTime | null>(existing?.checkIn ?? null)
   const [displayName, setDisplayName] = useState(existing?.displayName ?? DEFAULT_ONBOARDING_VALUES.displayName)
   const [avatar, setAvatar] = useState(existing?.avatar ?? DEFAULT_ONBOARDING_VALUES.avatar)
   const [isDone, setIsDone] = useState(false)
@@ -302,6 +302,7 @@ function OnboardingFlow({
   }
 
   const finish = () => {
+    if (!checkIn) return
     onComplete({
       status: 'completed',
       building,
@@ -426,7 +427,11 @@ function OnboardingFlow({
 
             <div className="onboarding-actions">
               <button className="btn-ghost" onClick={() => setStep(current => Math.max(0, current - 1))} disabled={step === 0}>Back</button>
-              <button className="btn-primary" onClick={() => (step === totalSteps - 1 ? finish() : setStep(current => current + 1))}>
+              <button
+                className="btn-primary"
+                onClick={() => (step === totalSteps - 1 ? finish() : setStep(current => current + 1))}
+                disabled={(step === 2 || step === totalSteps - 1) && checkIn === null}
+              >
                 {step === totalSteps - 1 ? 'Finish setup' : 'Next'}
               </button>
             </div>
