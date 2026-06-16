@@ -554,7 +554,6 @@ button { -webkit-tap-highlight-color: transparent; }
   box-shadow: var(--glow);
 }
 
-
 .notification-hero {
   position: relative;
   display: grid;
@@ -767,7 +766,27 @@ input[type='text']::placeholder { color: var(--muted); font-family: var(--font-b
 .empty-state-copy { margin-bottom: 18px; }
 .lb-empty { color: var(--soft); text-align: center; font-size: 15px; font-weight: 650; line-height: 1.55; padding: 28px 16px; margin: 0; }
 .enc-tag { letter-spacing: 0; text-transform: lowercase; border: 1px solid var(--teal-line); border-radius: var(--pill); background: var(--teal-soft); color: var(--teal); padding: 4px 10px; font-family: var(--font-mono); font-size: 10px; }
-.goal-input-row { margin-bottom: 10px; }
+.goal-input-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.goal-input-row input { min-width: 0; }
+.goal-remove-btn { flex: 0 0 44px; }
+.goal-add-btn { margin: 2px 0 10px; }
+.goal-edit-warning {
+  margin: -2px 0 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--soft);
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.goal-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 6px;
+}
 .goal-tx-hint {
   margin: -4px 0 12px;
   color: var(--muted);

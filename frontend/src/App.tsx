@@ -66,6 +66,7 @@ type MemberField = {
 const ACTIVE_GROUP_KEY = 'accountable:active-group'
 const GOAL_LABELS_KEY = 'accountable:goal-labels'
 const THEME_KEY = 'accountable:theme'
+const MAX_GOALS = 8
 const mainnetEnsClient = createPublicClient({
   chain: mainnet,
   transport: http(),
@@ -228,7 +229,6 @@ function NoGroupPrompt({ go, backLabel, onBack }: { go: (s: Screen) => void; bac
     </div>
   )
 }
-
 
 function NotificationOptInScreen({
   isSaving,
@@ -903,10 +903,12 @@ function DashboardScreen({
   const [lockSettled, setLockSettled] = useState(false)
   const [historyRevision, setHistoryRevision] = useState(0)
   const [celebratingGoals, setCelebratingGoals] = useState<Set<number>>(() => new Set())
+  const [isEditingGoals, setIsEditingGoals] = useState(false)
   const isLockingGoals = isWritePending && pendingGoals.size === 0
 
   const ownCompletions = address ? memberStatuses[address.toLowerCase()] || [] : []
   const locked = ownCompletions.length > 0
+  const isSavingGoals = isLockingGoals && (isEditingGoals || !locked)
   const today = useMemo(() => localDateString(), [])
   const completionHistory = useMemo(() => {
     if (!address || groupId === null) return new Set<string>()
@@ -979,6 +981,7 @@ function DashboardScreen({
 
   useEffect(() => {
     if (!address || groupId === null) return
+    if (isEditingGoals) return
     const saved = loadGoalLabels(groupId, address)
     if (saved) {
       setGoals(saved.length ? saved : defaultGoalsForProfile(onboarding))
@@ -987,7 +990,7 @@ function DashboardScreen({
     } else {
       setGoals(defaultGoalsForProfile(onboarding))
     }
-  }, [address, groupId, locked, onboarding, ownCompletions.length])
+  }, [address, groupId, isEditingGoals, locked, onboarding, ownCompletions.length])
 
   useEffect(() => {
     if (!showLockSuccess) return
@@ -1010,12 +1013,44 @@ function DashboardScreen({
     setGoals(next)
   }
 
+  const addGoal = () => {
+    setGoals(current => current.length >= MAX_GOALS ? current : [...current, ''])
+  }
+
+  const removeGoal = (i: number) => {
+    setGoals(current => current.length <= 1 ? current : current.filter((_, index) => index !== i))
+  }
+
+  const startEditingGoals = () => {
+    if (address && groupId !== null) {
+      const saved = loadGoalLabels(groupId, address)
+      setGoals(saved?.length ? saved : ownCompletions.map((_, index) => 'Encrypted goal ' + (index + 1)))
+    }
+    setGoalFeedback({})
+    setShowLockSuccess(false)
+    setLockSettled(false)
+    setStatus(null)
+    setIsEditingGoals(true)
+  }
+
+  const cancelEditingGoals = () => {
+    if (address && groupId !== null) {
+      const saved = loadGoalLabels(groupId, address)
+      setGoals(saved?.length ? saved : ownCompletions.map((_, index) => 'Encrypted goal ' + (index + 1)))
+    }
+    setStatus(null)
+    setIsEditingGoals(false)
+  }
+
   const handleLockGoals = async () => {
     if (!address || !walletClient || !publicClient) return setStatus('Connect your wallet first.')
     if (groupId === null) return setStatus('Create a group first.')
 
     const goalTexts = goals.map(goal => goal.trim()).filter(Boolean)
     if (!goalTexts.length) return setStatus('Add at least one goal first.')
+    if (goalTexts.length > MAX_GOALS) return setStatus('Keep it to ' + MAX_GOALS + ' goals or fewer.')
+
+    const wasEditingGoals = isEditingGoals
 
     try {
       setShowLockSuccess(false)
@@ -1029,7 +1064,7 @@ function DashboardScreen({
         .encryptInputs(goalTexts.map(goal => Encryptable.uint64(goalToUint64(goal))))
         .execute()
 
-      setStatus('Sending encrypted goals on-chain...')
+      setStatus(wasEditingGoals ? 'Updating encrypted goals on-chain...' : 'Sending encrypted goals on-chain...')
       const args = [BigInt(groupId), encryptedGoals] as unknown as [bigint, readonly { ctHash: bigint; securityZone: number; utype: number; signature: Address }[]]
       const hash = await writeContractAsync({
         address: CONTRACT_ADDRESS,
@@ -1043,13 +1078,15 @@ function DashboardScreen({
       await publicClient.waitForTransactionReceipt({ hash })
       saveGoalLabels(groupId, address, goalTexts)
       setGoals(goalTexts)
+      setGoalFeedback({})
+      setIsEditingGoals(false)
       await loadGroup()
-      setStatus('Goals locked ✓')
+      setStatus(wasEditingGoals ? 'Goals updated. Completion checks reset.' : 'Goals locked ✓')
       setShowLockSuccess(true)
     } catch (error) {
       setShowLockSuccess(false)
       setLockSettled(false)
-      setStatus(error instanceof Error ? error.message : 'Could not lock goals.')
+      setStatus(error instanceof Error ? error.message : 'Could not save goals.')
     }
   }
 
@@ -1201,10 +1238,15 @@ function DashboardScreen({
             Drop in {goals.length === 1 ? 'one small goal' : 'up to ' + goals.length + ' small goals'} — friends only see ✓ or ✗.
           </p>
         )}
-        {locked && (
+        {locked && !isEditingGoals && (
           <p className="goal-tx-hint">Each tap sends one on-chain transaction. Confirm the wallet prompt for that goal.</p>
         )}
-        {locked ? goals.map((goal, i) => {
+        {locked && isEditingGoals && (
+          <div className="goal-edit-warning" role="note">
+            Editing writes a new encrypted goal list on-chain. Your current completion checks for today will reset to ✗ after the wallet confirms.
+          </div>
+        )}
+        {locked && !isEditingGoals ? goals.map((goal, i) => {
           const isGoalComplete = ownCompletions[i]
           const isGoalPending = pendingGoals.has(i)
           const feedback = goalFeedback[i]
@@ -1229,12 +1271,33 @@ function DashboardScreen({
         }) : goals.map((goal, i) => (
           <div key={i} className="goal-input-row">
             <input type="text" placeholder={goalPlaceholders[i] ?? 'Goal ' + (i + 1)} value={goal} onChange={e => updateGoal(i, e.target.value)} />
+            {goals.length > 1 && (
+              <button className="remove-btn goal-remove-btn" type="button" onClick={() => removeGoal(i)} aria-label={'Remove goal ' + (i + 1)}>
+                ✕
+              </button>
+            )}
           </div>
         ))}
+        {(!locked || isEditingGoals) && goals.length < MAX_GOALS && (
+          <button className="add-btn goal-add-btn" type="button" onClick={addGoal}>+ Add goal</button>
+        )}
         {!locked && (
-          <button className="btn-primary full" onClick={handleLockGoals} disabled={isLockingGoals}>
-            {isLockingGoals ? 'Confirm in wallet...' : 'Lock in goals (encrypted)'}
+          <button className="btn-primary full" onClick={handleLockGoals} disabled={isSavingGoals}>
+            {isSavingGoals ? 'Confirm in wallet...' : 'Lock in goals (encrypted)'}
           </button>
+        )}
+        {locked && !isEditingGoals && (
+          <button className="btn-ghost full" type="button" onClick={startEditingGoals} disabled={isWritePending || pendingGoals.size > 0}>
+            Edit goals
+          </button>
+        )}
+        {locked && isEditingGoals && (
+          <div className="goal-edit-actions">
+            <button className="btn-ghost" type="button" onClick={cancelEditingGoals} disabled={isSavingGoals}>Cancel</button>
+            <button className="btn-primary" type="button" onClick={handleLockGoals} disabled={isSavingGoals}>
+              {isSavingGoals ? 'Confirm in wallet...' : 'Save updated goals'}
+            </button>
+          </div>
         )}
         </div>
         {loading && <p className="status">Loading group...</p>}
@@ -1288,6 +1351,7 @@ function LeaderboardScreen({
   const publicClient = usePublicClient()
   const [rankedMembers, setRankedMembers] = useState<Address[]>([])
   const [counts, setCounts] = useState<bigint[]>([])
+  const [goalTotals, setGoalTotals] = useState<Record<string, number>>({})
   const [status, setStatus] = useState<string | null>(null)
   const goalTotal = onboarding?.status === 'completed' ? onboarding.dailyGoals : 3
   const memberProfile = useMemberProfiles(rankedMembers, address, userProfile, publicClient)
@@ -1303,8 +1367,21 @@ function LeaderboardScreen({
           functionName: 'getLeaderboard',
           args: [BigInt(groupId)],
         }) as readonly [Address[], bigint[]]
-        setRankedMembers([...leaderboard[0]])
+        const members = [...leaderboard[0]]
+        const totals = await Promise.all(
+          members.map(async member => {
+            const completion = await publicClient.readContract({
+              address: CONTRACT_ADDRESS,
+              abi: ACCOUNTABILITY_ABI,
+              functionName: 'getCompletionStatus',
+              args: [BigInt(groupId), member],
+            })
+            return [member.toLowerCase(), (completion as boolean[]).length] as const
+          }),
+        )
+        setRankedMembers(members)
         setCounts([...leaderboard[1]])
+        setGoalTotals(Object.fromEntries(totals))
       } catch (error) {
         setStatus(error instanceof Error ? error.message : 'Could not load leaderboard.')
       }
@@ -1342,7 +1419,7 @@ function LeaderboardScreen({
             </div>
             <div className="lb-score">
               <span className="lb-count">{entry.count.toString()}</span>
-              <span className="lb-total">/{goalTotal}</span>
+              <span className="lb-total">/{Math.max(goalTotal, goalTotals[entry.member.toLowerCase()] ?? 0)}</span>
             </div>
           </div>
         ))}
